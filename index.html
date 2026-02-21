@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>M4E Synthetic Household Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #070e17; color: #cdd8e3; font-family: 'DM Mono', 'Courier New', monospace; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0b1622; }
+    ::-webkit-scrollbar-thumb { background: #1e2d3d; border-radius: 3px; }
+    select option { background: #0d1b29; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    const CENSUS = {
+      totalHouseholds: 10500,
+      streets: [
+        "Queen St E","Woodbine Ave","Kingston Rd","Beech Ave","Balsam Ave",
+        "Scarborough Rd","Wineva Ave","Kippendavie Ave","Maclean Ave","Fernwood Park Ave",
+        "Hammersmith Ave","Willow Ave","Wheeler Ave","Bellefair Ave","Waverley Rd",
+        "Glen Manor Dr","Elmer Ave","Hubbard Blvd","Lake Shore Blvd E","Silverbirch Ave",
+        "Silver Birch Ave","Swanwick Ave","Leuty Ave","Glen Stewart Ave","Neville Park Blvd",
+        "Bal Harbour Blvd","Coxwell Ave","Dundas St E","Victoria Park Ave","Eastern Ave",
+      ],
+      dwellingTypes: [
+        { type: "Single-detached house", weight: 0.31 },
+        { type: "Semi-detached house", weight: 0.24 },
+        { type: "Row house / townhouse", weight: 0.09 },
+        { type: "Apartment (low-rise, <5 storeys)", weight: 0.22 },
+        { type: "Apartment (high-rise, 5+ storeys)", weight: 0.09 },
+        { type: "Duplex", weight: 0.05 },
+      ],
+      tenure: [
+        { type: "Owner", weight: 0.58 },
+        { type: "Renter", weight: 0.42 },
+      ],
+      householdSize: [
+        { size: 1, weight: 0.32 }, { size: 2, weight: 0.32 },
+        { size: 3, weight: 0.16 }, { size: 4, weight: 0.13 },
+        { size: 5, weight: 0.05 }, { size: 6, weight: 0.02 },
+      ],
+      householdType: [
+        { type: "One-person", weight: 0.32 },
+        { type: "Couple without children", weight: 0.26 },
+        { type: "Couple with children", weight: 0.22 },
+        { type: "Single parent", weight: 0.10 },
+        { type: "Multigenerational / other", weight: 0.10 },
+      ],
+      income: [
+        { bracket: "Under $30,000", weight: 0.12, min: 8000, max: 29999 },
+        { bracket: "$30,000–$49,999", weight: 0.11, min: 30000, max: 49999 },
+        { bracket: "$50,000–$74,999", weight: 0.14, min: 50000, max: 74999 },
+        { bracket: "$75,000–$99,999", weight: 0.14, min: 75000, max: 99999 },
+        { bracket: "$100,000–$149,999", weight: 0.20, min: 100000, max: 149999 },
+        { bracket: "$150,000–$199,999", weight: 0.14, min: 150000, max: 199999 },
+        { bracket: "$200,000 and over", weight: 0.15, min: 200000, max: 380000 },
+      ],
+      ageGroups: [
+        { min: 0,  max: 4,  weight: 0.040 }, { min: 5,  max: 9,  weight: 0.048 },
+        { min: 10, max: 14, weight: 0.048 }, { min: 15, max: 19, weight: 0.043 },
+        { min: 20, max: 24, weight: 0.052 }, { min: 25, max: 34, weight: 0.145 },
+        { min: 35, max: 44, weight: 0.148 }, { min: 45, max: 54, weight: 0.135 },
+        { min: 55, max: 64, weight: 0.120 }, { min: 65, max: 74, weight: 0.098 },
+        { min: 75, max: 84, weight: 0.055 }, { min: 85, max: 98, weight: 0.018 },
+      ],
+      firstNamesM: ["James","Oliver","Liam","Noah","William","Lucas","Mason","Ethan","Logan","Jacob","Aiden","Elijah","Sebastian","Jack","Owen","Daniel","Henry","Caleb","Ryan","Nathan","Mateo","Mohamed","Yusuf","Arjun","Wei","Kai","Hiroshi","David","Samuel","Benjamin"],
+      firstNamesF: ["Emma","Olivia","Ava","Sophia","Isabella","Mia","Charlotte","Amelia","Harper","Evelyn","Luna","Grace","Lily","Hannah","Ella","Sofia","Scarlett","Victoria","Aria","Chloe","Fatima","Priya","Yuki","Mei","Aisha","Zoe","Nora","Elena","Claire","Layla"],
+      lastNames: ["Smith","Brown","Wilson","Johnson","Taylor","Davis","Miller","Anderson","Thompson","Martin","Garcia","Lee","Walker","Harris","Clark","Lewis","Robinson","Hall","Young","Allen","Nguyen","Chen","Kim","Patel","Singh","Ali","Kowalski","Ferreira","Tremblay","Murphy","O'Brien","MacDonald","Bergman","Johansson","Svensson"],
+    };
+
+    function mulberry32(seed) {
+      return function() {
+        seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+        let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function weightedChoice(items, rng) {
+      const total = items.reduce((s, i) => s + i.weight, 0);
+      let r = rng() * total;
+      for (const item of items) { r -= item.weight; if (r <= 0) return item; }
+      return items[items.length - 1];
+    }
+
+    function pick(arr, rng) { return arr[Math.floor(rng() * arr.length)]; }
+
+    function generateAge(rng) {
+      const g = weightedChoice(CENSUS.ageGroups, rng);
+      return g.min + Math.floor(rng() * (g.max - g.min + 1));
+    }
+
+    function generatePerson(rng, forceAdult = false) {
+      const age = forceAdult ? 18 + Math.floor(rng() * 62) : generateAge(rng);
+      const sex = rng() < 0.506 ? "F" : "M";
+      const fn = sex === "F" ? pick(CENSUS.firstNamesF, rng) : pick(CENSUS.firstNamesM, rng);
+      return { name: fn, sex, age };
+    }
+
+    function generateHousehold(id, rng) {
+      const dwelling = weightedChoice(CENSUS.dwellingTypes, rng);
+      const tenure = weightedChoice(CENSUS.tenure, rng);
+      const hhType = weightedChoice(CENSUS.householdType, rng);
+      const incomeBracket = weightedChoice(CENSUS.income, rng);
+      const incomeVal = incomeBracket.min + Math.floor(rng() * (incomeBracket.max - incomeBracket.min));
+      const lastName = pick(CENSUS.lastNames, rng);
+      const streetNum = 10 + Math.floor(rng() * 490);
+      const street = pick(CENSUS.streets, rng);
+      const postal = `M4E ${String.fromCharCode(65 + Math.floor(rng() * 10))}${Math.floor(rng() * 10)}${String.fromCharCode(65 + Math.floor(rng() * 10))}`;
+
+      let size = weightedChoice(CENSUS.householdSize, rng).size;
+      if (hhType.type === "One-person") size = 1;
+      else if (hhType.type === "Couple without children" && size < 2) size = 2;
+      else if (hhType.type === "Couple with children" && size < 3) size = 3;
+      else if (hhType.type === "Single parent" && size < 2) size = 2;
+
+      const members = [];
+      if (hhType.type === "One-person") {
+        members.push(generatePerson(rng, true));
+      } else if (hhType.type === "Couple without children") {
+        const p1 = generatePerson(rng, true);
+        const p2Age = Math.max(22, Math.min(90, p1.age + Math.floor(rng() * 10 - 5)));
+        members.push(p1, { ...generatePerson(rng, true), age: p2Age });
+      } else if (hhType.type === "Couple with children") {
+        const p1 = generatePerson(rng, true);
+        const p2Age = Math.max(25, Math.min(65, p1.age + Math.floor(rng() * 8 - 4)));
+        members.push(p1, { ...generatePerson(rng, true), age: p2Age });
+        for (let k = 0; k < Math.max(1, size - 2); k++) {
+          members.push({ ...generatePerson(rng, false), age: Math.floor(rng() * 22) });
+        }
+      } else if (hhType.type === "Single parent") {
+        members.push(generatePerson(rng, true));
+        for (let k = 0; k < Math.max(1, size - 1); k++) {
+          members.push({ ...generatePerson(rng, false), age: Math.floor(rng() * 22) });
+        }
+      } else {
+        const numAdults = 2 + Math.floor(rng() * 2);
+        for (let a = 0; a < numAdults; a++) members.push(generatePerson(rng, true));
+        for (let o = 0; o < Math.max(0, size - numAdults); o++) {
+          members.push({ ...generatePerson(rng, false), age: Math.floor(rng() * 18) });
+        }
+      }
+
+      return {
+        id: `M4E-${String(id).padStart(5, "0")}`,
+        address: `${streetNum} ${street}`,
+        postal, dwelling: dwelling.type, tenure: tenure.type,
+        householdType: hhType.type, householdSize: members.length,
+        incomeBracket: incomeBracket.bracket, annualIncome: incomeVal,
+        lastName, members,
+      };
+    }
+
+    function generateBatch(startId, count, baseSeed) {
+      const results = [];
+      for (let i = 0; i < count; i++) {
+        const rng = mulberry32(baseSeed + startId + i);
+        results.push(generateHousehold(startId + i, rng));
+      }
+      return results;
+    }
+
+    function toCSV(households) {
+      const headers = ["ID","Address","Postal","DwellingType","Tenure","HouseholdType","HouseholdSize","IncomeBracket","AnnualIncome","Members"];
+      const rows = households.map(h => [
+        h.id, `"${h.address}"`, h.postal, `"${h.dwelling}"`, h.tenure,
+        `"${h.householdType}"`, h.householdSize, `"${h.incomeBracket}"`, h.annualIncome,
+        `"${h.members.map(m => `${m.name} (${m.sex}, ${m.age})`).join("; ")}"`
+      ]);
+      return [headers, ...rows].map(r => r.join(",")).join("\n");
+    }
+
+    function downloadFile(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    const SEED = 20210511;
+    const PAGE_SIZE = 50;
+    const TOTAL = CENSUS.totalHouseholds;
+
+    const S = {
+      select: { background: "#0d1b29", border: "1px solid #1e2d3d", color: "#cdd8e3", borderRadius: 4, padding: "5px 8px", fontSize: 12, cursor: "pointer" },
+      btn: { background: "#1e3a5f", border: "1px solid #2d5280", color: "#90caf9", borderRadius: 4, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" },
+    };
+
+    function MemberPill({ m }) {
+      return (
+        <span style={{ display:"inline-flex", alignItems:"center", background:"#1e2a3a", border:"1px solid #2d3f52", borderRadius:20, padding:"3px 10px", margin:2, fontSize:11, gap:4 }}>
+          <span style={{ color: m.sex==="F"?"#f48fb1":"#90caf9" }}>{m.sex==="F"?"♀":"♂"}</span>
+          <span style={{ color:"#cdd8e3" }}>{m.name}</span>
+          <span style={{ background: m.age<18?"#64b5f6":m.age<35?"#81c784":m.age<55?"#ffb74d":m.age<70?"#e57373":"#ce93d8", color:"#111", borderRadius:4, padding:"1px 5px", fontSize:10, fontWeight:700, marginLeft:2 }}>{m.age}</span>
+        </span>
+      );
+    }
+
+    function HouseholdCard({ hh, onClick, selected }) {
+      return (
+        <div onClick={() => onClick(hh)} style={{
+          background: selected?"#0d2137":"#101c2a",
+          border: `1px solid ${selected?"#3d7ab5":"#1e2d3d"}`,
+          borderLeft: `3px solid ${selected?"#5b9bd5":"#1e2d3d"}`,
+          borderRadius:6, padding:"10px 14px", cursor:"pointer",
+          transition:"all 0.15s", marginBottom:6,
+        }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+            <div>
+              <span style={{ color:"#5b9bd5", fontFamily:"monospace", fontSize:11 }}>{hh.id}</span>
+              <div style={{ color:"#e2eaf2", fontWeight:600, fontSize:14, marginTop:1 }}>{hh.address}</div>
+              <div style={{ color:"#7a9bb5", fontSize:12 }}>{hh.postal} · {hh.dwelling}</div>
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ color:"#81c784", fontWeight:700, fontSize:13 }}>${hh.annualIncome.toLocaleString()}</div>
+              <div style={{ color:"#7a9bb5", fontSize:11 }}>{hh.tenure}</div>
+            </div>
+          </div>
+          <div style={{ marginTop:6, display:"flex", flexWrap:"wrap" }}>
+            {hh.members.map((m,i) => <MemberPill key={i} m={m} />)}
+          </div>
+        </div>
+      );
+    }
+
+    function DetailPanel({ hh, onClose }) {
+      if (!hh) return null;
+      return (
+        <div style={{ background:"#0b1622", border:"1px solid #1e2d3d", borderRadius:8, padding:20, position:"sticky", top:10 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:12 }}>
+            <span style={{ color:"#5b9bd5", fontFamily:"monospace", fontSize:12 }}>{hh.id}</span>
+            <button onClick={onClose} style={{ background:"none", border:"none", color:"#7a9bb5", cursor:"pointer", fontSize:20, lineHeight:1 }}>×</button>
+          </div>
+          <h3 style={{ color:"#e2eaf2", margin:"0 0 4px", fontSize:16 }}>{hh.address}</h3>
+          <div style={{ color:"#7a9bb5", fontSize:12, marginBottom:16 }}>{hh.postal}</div>
+          {[
+            ["Dwelling Type", hh.dwelling], ["Tenure", hh.tenure],
+            ["Household Type", hh.householdType], ["Household Size", hh.householdSize + " person" + (hh.householdSize>1?"s":"")],
+            ["Income Bracket", hh.incomeBracket], ["Annual Income", "$"+hh.annualIncome.toLocaleString()],
+          ].map(([label, val]) => (
+            <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #1e2d3d" }}>
+              <span style={{ color:"#7a9bb5", fontSize:12 }}>{label}</span>
+              <span style={{ color:"#cdd8e3", fontSize:12, fontWeight:500, textAlign:"right", maxWidth:"55%" }}>{val}</span>
+            </div>
+          ))}
+          <div style={{ marginTop:16 }}>
+            <div style={{ color:"#7a9bb5", fontSize:10, marginBottom:8, textTransform:"uppercase", letterSpacing:1 }}>Household Members</div>
+            {hh.members.map((m,i) => (
+              <div key={i} style={{ display:"flex", gap:12, padding:"6px 0", borderBottom:"1px solid #131f2b", alignItems:"center" }}>
+                <span style={{ color:m.sex==="F"?"#f48fb1":"#90caf9", fontSize:20 }}>{m.sex==="F"?"♀":"♂"}</span>
+                <div>
+                  <div style={{ color:"#e2eaf2", fontSize:13, fontWeight:500 }}>{m.name} {hh.lastName}</div>
+                  <div style={{ color:"#7a9bb5", fontSize:11 }}>Age {m.age}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [generated, setGenerated] = useState([]);
+      const [isGenerating, setIsGenerating] = useState(false);
+      const [progress, setProgress] = useState(0);
+      const [selected, setSelected] = useState(null);
+      const [page, setPage] = useState(1);
+      const [search, setSearch] = useState("");
+      const [filterDwelling, setFilterDwelling] = useState("All");
+      const [filterTenure, setFilterTenure] = useState("All");
+      const [filterIncome, setFilterIncome] = useState("All");
+      const [filterSize, setFilterSize] = useState("All");
+      const [sortBy, setSortBy] = useState("id");
+
+      useEffect(() => {
+        if (isGenerating || generated.length >= TOTAL) return;
+        setIsGenerating(true);
+        const BATCH = 500;
+        const runBatch = (start) => {
+          if (start >= TOTAL) { setIsGenerating(false); return; }
+          setTimeout(() => {
+            const batch = generateBatch(start + 1, Math.min(BATCH, TOTAL - start), SEED);
+            setGenerated(prev => [...prev, ...batch]);
+            setProgress(Math.min(start + BATCH, TOTAL));
+            runBatch(start + BATCH);
+          }, 0);
+        };
+        runBatch(0);
+      }, []);
+
+      const filtered = useMemo(() => {
+        let data = generated;
+        if (search) {
+          const q = search.toLowerCase();
+          data = data.filter(h =>
+            h.id.toLowerCase().includes(q) || h.address.toLowerCase().includes(q) ||
+            h.postal.toLowerCase().includes(q) || h.lastName.toLowerCase().includes(q) ||
+            h.members.some(m => m.name.toLowerCase().includes(q))
+          );
+        }
+        if (filterDwelling !== "All") data = data.filter(h => h.dwelling === filterDwelling);
+        if (filterTenure !== "All") data = data.filter(h => h.tenure === filterTenure);
+        if (filterIncome !== "All") data = data.filter(h => h.incomeBracket === filterIncome);
+        if (filterSize !== "All") data = data.filter(h => {
+          if (filterSize === "1") return h.householdSize === 1;
+          if (filterSize === "2") return h.householdSize === 2;
+          if (filterSize === "3") return h.householdSize === 3;
+          if (filterSize === "4+") return h.householdSize >= 4;
+          return true;
+        });
+        if (sortBy === "income_desc") return [...data].sort((a,b) => b.annualIncome - a.annualIncome);
+        if (sortBy === "income_asc") return [...data].sort((a,b) => a.annualIncome - b.annualIncome);
+        if (sortBy === "size_desc") return [...data].sort((a,b) => b.householdSize - a.householdSize);
+        if (sortBy === "size_asc") return [...data].sort((a,b) => a.householdSize - b.householdSize);
+        return data;
+      }, [generated, search, filterDwelling, filterTenure, filterIncome, filterSize, sortBy]);
+
+      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+      const currentPage = Math.min(page, totalPages);
+      const pageData = filtered.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+      const pct = Math.round((progress / TOTAL) * 100);
+
+      const median = generated.length > 0
+        ? [...generated].sort((a,b) => a.annualIncome - b.annualIncome)[Math.floor(generated.length/2)]?.annualIncome
+        : 0;
+
+      return (
+        <div style={{ fontFamily:"'DM Mono','Courier New',monospace", background:"#070e17", minHeight:"100vh" }}>
+
+          {/* Header */}
+          <div style={{ background:"#0b1622", borderBottom:"1px solid #1e2d3d", padding:"14px 24px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ background:"#1e3a5f", color:"#5b9bd5", borderRadius:4, padding:"2px 10px", fontWeight:700, fontSize:13, letterSpacing:1 }}>M4E</span>
+                <h1 style={{ margin:0, fontSize:16, color:"#e2eaf2", fontWeight:600 }}>Synthetic Household Explorer</h1>
+              </div>
+              <div style={{ fontSize:11, color:"#5a7a96", marginTop:3 }}>
+                The Beaches, Toronto · 2021 Census-grounded · {generated.length.toLocaleString()} / {TOTAL.toLocaleString()} households
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => downloadFile(JSON.stringify(generated, null, 2), "m4e_households.json", "application/json")} disabled={isGenerating} style={S.btn}>↓ JSON</button>
+              <button onClick={() => downloadFile(toCSV(generated), "m4e_households.csv", "text/csv")} disabled={isGenerating} style={S.btn}>↓ CSV</button>
+            </div>
+          </div>
+
+          {/* Progress */}
+          {isGenerating && (
+            <div style={{ background:"#0b1622", padding:"0 24px 10px" }}>
+              <div style={{ background:"#1e2d3d", borderRadius:4, height:4, overflow:"hidden" }}>
+                <div style={{ background:"#3d7ab5", width:`${pct}%`, height:"100%", transition:"width 0.3s" }} />
+              </div>
+              <div style={{ color:"#5a7a96", fontSize:11, marginTop:4 }}>Generating… {pct}% ({progress.toLocaleString()} households)</div>
+            </div>
+          )}
+
+          {/* Filters */}
+          <div style={{ background:"#0b1622", borderBottom:"1px solid #1e2d3d", padding:"10px 24px", display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search address, name, ID, postal…"
+              style={{ ...S.select, padding:"6px 10px", width:230 }} />
+            <select value={filterDwelling} onChange={e => { setFilterDwelling(e.target.value); setPage(1); }} style={S.select}>
+              <option value="All">All Dwelling Types</option>
+              {CENSUS.dwellingTypes.map(d => <option key={d.type}>{d.type}</option>)}
+            </select>
+            <select value={filterTenure} onChange={e => { setFilterTenure(e.target.value); setPage(1); }} style={S.select}>
+              <option value="All">Owner + Renter</option>
+              <option>Owner</option><option>Renter</option>
+            </select>
+            <select value={filterIncome} onChange={e => { setFilterIncome(e.target.value); setPage(1); }} style={S.select}>
+              <option value="All">All Income Brackets</option>
+              {CENSUS.income.map(i => <option key={i.bracket}>{i.bracket}</option>)}
+            </select>
+            <select value={filterSize} onChange={e => { setFilterSize(e.target.value); setPage(1); }} style={S.select}>
+              <option value="All">Any Size</option>
+              <option value="1">1 Person</option><option value="2">2 People</option>
+              <option value="3">3 People</option><option value="4+">4+ People</option>
+            </select>
+            <select value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(1); }} style={S.select}>
+              <option value="id">Sort: ID</option>
+              <option value="income_desc">Income ↓</option><option value="income_asc">Income ↑</option>
+              <option value="size_desc">Size ↓</option><option value="size_asc">Size ↑</option>
+            </select>
+            <span style={{ color:"#5a7a96", fontSize:11, marginLeft:"auto" }}>
+              {filtered.length.toLocaleString()} matching · pg {currentPage}/{totalPages}
+            </span>
+          </div>
+
+          {/* Body */}
+          <div style={{ display:"grid", gridTemplateColumns: selected ? "1fr 340px" : "1fr", maxWidth:1400, margin:"0 auto", padding:20, alignItems:"start", gap:0 }}>
+            <div>
+              {isGenerating && generated.length === 0 && (
+                <div style={{ color:"#5a7a96", textAlign:"center", marginTop:80, fontSize:13 }}>Generating households from 2021 Census distributions…</div>
+              )}
+              {pageData.length === 0 && !isGenerating && (
+                <div style={{ color:"#5a7a96", textAlign:"center", marginTop:80 }}>No households match your filters.</div>
+              )}
+              {pageData.map(hh => (
+                <HouseholdCard key={hh.id} hh={hh}
+                  onClick={h => setSelected(selected?.id === h.id ? null : h)}
+                  selected={selected?.id === hh.id} />
+              ))}
+
+              {totalPages > 1 && (
+                <div style={{ display:"flex", justifyContent:"center", gap:6, marginTop:16, flexWrap:"wrap" }}>
+                  <button onClick={() => setPage(1)} disabled={currentPage===1} style={S.select}>«</button>
+                  <button onClick={() => setPage(p => Math.max(1,p-1))} disabled={currentPage===1} style={S.select}>‹</button>
+                  {Array.from({length: Math.min(7, totalPages)}, (_, i) => {
+                    let p;
+                    if (totalPages <= 7) p = i+1;
+                    else if (currentPage <= 4) p = i+1;
+                    else if (currentPage >= totalPages-3) p = totalPages-6+i;
+                    else p = currentPage-3+i;
+                    return (
+                      <button key={p} onClick={() => setPage(p)}
+                        style={{ ...S.select, background: currentPage===p?"#1e3a5f":"#0d1b29", color: currentPage===p?"#90caf9":"#cdd8e3", fontWeight: currentPage===p?700:400 }}>
+                        {p}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setPage(p => Math.min(totalPages,p+1))} disabled={currentPage===totalPages} style={S.select}>›</button>
+                  <button onClick={() => setPage(totalPages)} disabled={currentPage===totalPages} style={S.select}>»</button>
+                </div>
+              )}
+            </div>
+
+            {selected && (
+              <div style={{ paddingLeft:20 }}>
+                <DetailPanel hh={selected} onClose={() => setSelected(null)} />
+              </div>
+            )}
+          </div>
+
+          {/* Footer stats */}
+          {generated.length > 0 && (
+            <div style={{ background:"#0b1622", borderTop:"1px solid #1e2d3d", padding:"12px 24px", display:"flex", gap:32, flexWrap:"wrap" }}>
+              {[
+                ["Total Households", generated.length.toLocaleString()],
+                ["Total Residents", generated.reduce((s,h) => s+h.householdSize, 0).toLocaleString()],
+                ["Avg Household Size", (generated.reduce((s,h) => s+h.householdSize, 0) / generated.length).toFixed(2)],
+                ["Median Income", "$" + median?.toLocaleString()],
+                ["% Owner-occupied", Math.round(generated.filter(h=>h.tenure==="Owner").length / generated.length * 100) + "%"],
+              ].map(([label, val]) => (
+                <div key={label}>
+                  <div style={{ color:"#5a7a96", fontSize:10, textTransform:"uppercase", letterSpacing:1 }}>{label}</div>
+                  <div style={{ color:"#81c784", fontWeight:700, fontSize:14 }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
