@@ -1,469 +1,792 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>M4E Synthetic Household Explorer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #070e17; color: #cdd8e3; font-family: 'DM Mono', 'Courier New', monospace; }
-    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0b1622; }
-    ::-webkit-scrollbar-thumb { background: #1e2d3d; border-radius: 3px; }
-    select option { background: #0d1b29; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#06111c;color:#c8d8e8;font-family:'DM Sans',sans-serif;}
+    ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:#0a1825;}
+    ::-webkit-scrollbar-thumb{background:#1e3048;border-radius:3px;}
+    select option{background:#0d1e2e;}
+    input::placeholder{color:#3d5a73;}
   </style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
 
-    const CENSUS = {
-      totalHouseholds: 10500,
-      streets: [
-        "Queen St E","Woodbine Ave","Kingston Rd","Beech Ave","Balsam Ave",
-        "Scarborough Rd","Wineva Ave","Kippendavie Ave","Maclean Ave","Fernwood Park Ave",
-        "Hammersmith Ave","Willow Ave","Wheeler Ave","Bellefair Ave","Waverley Rd",
-        "Glen Manor Dr","Elmer Ave","Hubbard Blvd","Lake Shore Blvd E","Silverbirch Ave",
-        "Silver Birch Ave","Swanwick Ave","Leuty Ave","Glen Stewart Ave","Neville Park Blvd",
-        "Bal Harbour Blvd","Coxwell Ave","Dundas St E","Victoria Park Ave","Eastern Ave",
-      ],
-      dwellingTypes: [
-        { type: "Single-detached house", weight: 0.31 },
-        { type: "Semi-detached house", weight: 0.24 },
-        { type: "Row house / townhouse", weight: 0.09 },
-        { type: "Apartment (low-rise, <5 storeys)", weight: 0.22 },
-        { type: "Apartment (high-rise, 5+ storeys)", weight: 0.09 },
-        { type: "Duplex", weight: 0.05 },
-      ],
-      tenure: [
-        { type: "Owner", weight: 0.58 },
-        { type: "Renter", weight: 0.42 },
-      ],
-      householdSize: [
-        { size: 1, weight: 0.32 }, { size: 2, weight: 0.32 },
-        { size: 3, weight: 0.16 }, { size: 4, weight: 0.13 },
-        { size: 5, weight: 0.05 }, { size: 6, weight: 0.02 },
-      ],
-      householdType: [
-        { type: "One-person", weight: 0.32 },
-        { type: "Couple without children", weight: 0.26 },
-        { type: "Couple with children", weight: 0.22 },
-        { type: "Single parent", weight: 0.10 },
-        { type: "Multigenerational / other", weight: 0.10 },
-      ],
-      income: [
-        { bracket: "Under $30,000", weight: 0.12, min: 8000, max: 29999 },
-        { bracket: "$30,000–$49,999", weight: 0.11, min: 30000, max: 49999 },
-        { bracket: "$50,000–$74,999", weight: 0.14, min: 50000, max: 74999 },
-        { bracket: "$75,000–$99,999", weight: 0.14, min: 75000, max: 99999 },
-        { bracket: "$100,000–$149,999", weight: 0.20, min: 100000, max: 149999 },
-        { bracket: "$150,000–$199,999", weight: 0.14, min: 150000, max: 199999 },
-        { bracket: "$200,000 and over", weight: 0.15, min: 200000, max: 380000 },
-      ],
-      ageGroups: [
-        { min: 0,  max: 4,  weight: 0.040 }, { min: 5,  max: 9,  weight: 0.048 },
-        { min: 10, max: 14, weight: 0.048 }, { min: 15, max: 19, weight: 0.043 },
-        { min: 20, max: 24, weight: 0.052 }, { min: 25, max: 34, weight: 0.145 },
-        { min: 35, max: 44, weight: 0.148 }, { min: 45, max: 54, weight: 0.135 },
-        { min: 55, max: 64, weight: 0.120 }, { min: 65, max: 74, weight: 0.098 },
-        { min: 75, max: 84, weight: 0.055 }, { min: 85, max: 98, weight: 0.018 },
-      ],
-      firstNamesM: ["James","Oliver","Liam","Noah","William","Lucas","Mason","Ethan","Logan","Jacob","Aiden","Elijah","Sebastian","Jack","Owen","Daniel","Henry","Caleb","Ryan","Nathan","Mateo","Mohamed","Yusuf","Arjun","Wei","Kai","Hiroshi","David","Samuel","Benjamin"],
-      firstNamesF: ["Emma","Olivia","Ava","Sophia","Isabella","Mia","Charlotte","Amelia","Harper","Evelyn","Luna","Grace","Lily","Hannah","Ella","Sofia","Scarlett","Victoria","Aria","Chloe","Fatima","Priya","Yuki","Mei","Aisha","Zoe","Nora","Elena","Claire","Layla"],
-      lastNames: ["Smith","Brown","Wilson","Johnson","Taylor","Davis","Miller","Anderson","Thompson","Martin","Garcia","Lee","Walker","Harris","Clark","Lewis","Robinson","Hall","Young","Allen","Nguyen","Chen","Kim","Patel","Singh","Ali","Kowalski","Ferreira","Tremblay","Murphy","O'Brien","MacDonald","Bergman","Johansson","Svensson"],
-    };
+// ═══════════════════════════════════════════════════════════════
+// CENSUS DISTRIBUTIONS — Ward 19 Beaches-East York 2021
+// ═══════════════════════════════════════════════════════════════
+const CENSUS = {
+  totalHouseholds: 10500,
+  ageGroups: [
+    {min:0,max:4,w:.056},{min:5,max:9,w:.059},{min:10,max:14,w:.057},
+    {min:15,max:19,w:.051},{min:20,max:24,w:.049},{min:25,max:29,w:.056},
+    {min:30,max:34,w:.072},{min:35,max:39,w:.081},{min:40,max:44,w:.082},
+    {min:45,max:49,w:.074},{min:50,max:54,w:.075},{min:55,max:59,w:.074},
+    {min:60,max:64,w:.065},{min:65,max:69,w:.052},{min:70,max:74,w:.041},
+    {min:75,max:79,w:.025},{min:80,max:84,w:.016},{min:85,max:98,w:.015},
+  ],
+  dwellingTypes: [
+    {type:"Single-detached house",w:.31},{type:"Semi-detached house",w:.24},
+    {type:"Row house / townhouse",w:.09},{type:"Duplex",w:.05},
+    {type:"Apartment, low-rise (<5 storeys)",w:.22},
+    {type:"Apartment, high-rise (5+ storeys)",w:.09},
+  ],
+  tenure:[{type:"Owner",w:.58},{type:"Renter",w:.42}],
+  householdType:[
+    {type:"One-person",w:.32},{type:"Couple, no children",w:.26},
+    {type:"Couple with children",w:.22},{type:"Single parent",w:.10},
+    {type:"Multigenerational/other",w:.10},
+  ],
+  householdSize:[
+    {size:1,w:.32},{size:2,w:.32},{size:3,w:.16},
+    {size:4,w:.13},{size:5,w:.05},{size:6,w:.02},
+  ],
+  income:[
+    {bracket:"Under $30,000",w:.12,min:8000,max:29999},
+    {bracket:"$30,000–$49,999",w:.11,min:30000,max:49999},
+    {bracket:"$50,000–$74,999",w:.14,min:50000,max:74999},
+    {bracket:"$75,000–$99,999",w:.14,min:75000,max:99999},
+    {bracket:"$100,000–$149,999",w:.20,min:100000,max:149999},
+    {bracket:"$150,000–$199,999",w:.14,min:150000,max:199999},
+    {bracket:"$200,000 and over",w:.15,min:200000,max:380000},
+  ],
+  education:[
+    {level:"No certificate/diploma",w:.07},{level:"Secondary school diploma",w:.18},
+    {level:"Trades/apprenticeship",w:.04},{level:"College diploma",w:.16},
+    {level:"Bachelor's degree",w:.30},{level:"Graduate/professional degree",w:.25},
+  ],
+  employment:[
+    {status:"Employed – full-time",w:.48},{status:"Employed – part-time",w:.12},
+    {status:"Self-employed",w:.10},{status:"Unemployed",w:.04},
+    {status:"Not in labour force",w:.26},
+  ],
+};
 
-    function mulberry32(seed) {
-      return function() {
-        seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-        let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-        return ((t ^ t >>> 14) >>> 0) / 4294967296;
-      };
+// ═══════════════════════════════════════════════════════════════
+// BEHAVIOURAL DISTRIBUTIONS
+// Calibrated to M4E/Beaches context:
+// - High walkability (Walk Score ~88), strong TTC usage
+// - Affluent, high digital adoption
+// - Strong parks/beach recreation culture
+// - Mix of owner/renter shelter burden patterns
+// ═══════════════════════════════════════════════════════════════
+const BEH = {
+  // TRANSIT — TTC Ridership data + Beaches travel patterns
+  transitMode:[
+    {mode:"TTC – frequent (4–5x/week)",w:.28},
+    {mode:"TTC – occasional (1–3x/week)",w:.22},
+    {mode:"Walk / cycle primary",w:.18},
+    {mode:"Car – primary",w:.20},
+    {mode:"Car + TTC combination",w:.08},
+    {mode:"Remote / minimal travel",w:.04},
+  ],
+  // Weekly TTC trips range by mode (used for numeric field)
+  transitTrips:{
+    "TTC – frequent (4–5x/week)":[7,12],
+    "TTC – occasional (1–3x/week)":[2,6],
+    "Walk / cycle primary":[0,2],
+    "Car – primary":[0,1],
+    "Car + TTC combination":[3,6],
+    "Remote / minimal travel":[0,1],
+  },
+  transitPass:[
+    {type:"Presto monthly",w:.38},
+    {type:"Pay-per-ride",w:.20},
+    {type:"No Presto / non-rider",w:.42},
+  ],
+
+  // DIGITAL — adjusted for high-income, high-education neighbourhood
+  primaryDevice:[
+    {device:"Smartphone (iOS)",w:.48},
+    {device:"Smartphone (Android)",w:.22},
+    {device:"Laptop/desktop primary",w:.18},
+    {device:"Tablet primary",w:.07},
+    {device:"Multi-device",w:.05},
+  ],
+  internetUsage:[
+    {usage:"Heavy (6+ hrs/day)",w:.28},
+    {usage:"Moderate (3–6 hrs/day)",w:.42},
+    {usage:"Light (1–3 hrs/day)",w:.22},
+    {usage:"Minimal (<1 hr/day)",w:.08},
+  ],
+  searchEngine:[
+    {engine:"Google",w:.82},{engine:"Bing",w:.07},
+    {engine:"DuckDuckGo",w:.07},{engine:"Other",w:.04},
+  ],
+  onlineShopping:[
+    {freq:"Weekly",w:.25},{freq:"2–3x/month",w:.35},
+    {freq:"Monthly",w:.25},{freq:"Rarely",w:.15},
+  ],
+
+  // PRODUCTS / OWNERSHIP
+  carOwnership:[
+    {own:"No car",w:.38},{own:"1 car",w:.44},{own:"2+ cars",w:.18},
+  ],
+  bikeOwnership:[
+    {own:"No bike",w:.30},{own:"1 bike",w:.42},{own:"2+ bikes",w:.28},
+  ],
+  streamingServices:[
+    {count:"None",w:.08},{count:"1 service",w:.22},
+    {count:"2–3 services",w:.45},{count:"4+ services",w:.25},
+  ],
+  // Top streaming combos for detail display
+  streamingOptions:["Netflix","Amazon Prime","Disney+","Apple TV+","Crave","CBC Gem","Spotify","YouTube Premium","Tubi"],
+
+  // RECREATION & PARKS — Beaches is highly active outdoor neighbourhood
+  beachVisitFreq:[
+    {freq:"Weekly (summer)",w:.38},{freq:"Monthly",w:.28},
+    {freq:"A few times/year",w:.22},{freq:"Rarely / never",w:.12},
+  ],
+  parkActivities:[
+    {act:"Walking/jogging",w:.35},{act:"Dog walking",w:.20},
+    {act:"Cycling",w:.18},{act:"Beach/swimming",w:.12},
+    {act:"Sports/fitness",w:.10},{act:"Passive/picnic",w:.05},
+  ],
+  transitToParks:[
+    {mode:"Walk",w:.58},{mode:"Cycle",w:.22},
+    {mode:"TTC",w:.12},{mode:"Drive",w:.08},
+  ],
+  facilityUsage:[
+    {fac:"Beaches Recreation Centre",w:.30},
+    {fac:"Woodbine Beach / Boardwalk",w:.35},
+    {fac:"Kew Gardens",w:.20},
+    {fac:"Glen Stewart Ravine",w:.10},
+    {fac:"Ted Reeve Arena",w:.05},
+  ],
+
+  // SHELTER COSTS & BURDEN
+  // Owner shelter costs calibrated to M4E home values / mortgage rates
+  ownerMonthlyCost:[
+    {range:"Under $1,500",w:.08,min:800,max:1499},
+    {range:"$1,500–$2,499",w:.18,min:1500,max:2499},
+    {range:"$2,500–$3,499",w:.28,min:2500,max:3499},
+    {range:"$3,500–$4,999",w:.28,min:3500,max:4999},
+    {range:"$5,000+",w:.18,min:5000,max:8500},
+  ],
+  // Renter shelter costs (M4E rents are high)
+  renterMonthlyCost:[
+    {range:"Under $1,500",w:.12,min:900,max:1499},
+    {range:"$1,500–$2,499",w:.38,min:1500,max:2499},
+    {range:"$2,500–$3,499",w:.32,min:2500,max:3499},
+    {range:"$3,500+",w:.18,min:3500,max:5500},
+  ],
+};
+
+// ═══════════════════════════════════════════════════════════════
+// RNG + HELPERS
+// ═══════════════════════════════════════════════════════════════
+function rng32(seed) {
+  return () => {
+    seed|=0; seed=seed+0x6D2B79F5|0;
+    let t=Math.imul(seed^seed>>>15,1|seed);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return ((t^t>>>14)>>>0)/4294967296;
+  };
+}
+function wc(items,rng){
+  const tot=items.reduce((s,i)=>s+(i.w||i.weight||0),0);
+  let r=rng()*tot;
+  for(const it of items){r-=(it.w||it.weight||0);if(r<=0)return it;}
+  return items[items.length-1];
+}
+function pick(arr,rng){return arr[Math.floor(rng()*arr.length)];}
+function ri(min,max,rng){return min+Math.floor(rng()*(max-min+1));}
+function genAge(rng,minA=0,maxA=98){
+  const v=CENSUS.ageGroups.filter(g=>g.max>=minA&&g.min<=maxA);
+  const g=wc(v.length?v:CENSUS.ageGroups,rng);
+  return Math.max(minA,Math.min(maxA,ri(g.min,g.max,rng)));
+}
+function eduForAge(age,rng){
+  if(age<15)return"N/A";
+  if(age<20)return wc([{level:"No certificate/diploma",w:.55},{level:"Secondary school diploma",w:.45}],rng).level;
+  if(age<25)return wc([{level:"No certificate/diploma",w:.10},{level:"Secondary school diploma",w:.30},{level:"College diploma",w:.25},{level:"Bachelor's degree",w:.30},{level:"Graduate/professional degree",w:.05}],rng).level;
+  return wc(CENSUS.education,rng).level;
+}
+function empForAge(age,rng){
+  if(age<15)return"N/A";
+  if(age>=70)return wc([{status:"Employed – part-time",w:.08},{status:"Self-employed",w:.05},{status:"Not in labour force",w:.87}],rng).status;
+  if(age>=65)return wc([{status:"Employed – full-time",w:.12},{status:"Employed – part-time",w:.15},{status:"Self-employed",w:.08},{status:"Not in labour force",w:.65}],rng).status;
+  if(age<20) return wc([{status:"Employed – part-time",w:.35},{status:"Unemployed",w:.08},{status:"Not in labour force",w:.57}],rng).status;
+  return wc(CENSUS.employment,rng).status;
+}
+function mkPerson(rng,age,sex,rel){
+  return{sex,age,relationship:rel,education:eduForAge(age,rng),employment:empForAge(age,rng)};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BEHAVIOURAL GENERATOR
+// Takes a separate rng so base demographics and behaviour
+// can be resampled independently
+// ═══════════════════════════════════════════════════════════════
+function genBehaviour(rng, tenure, income, householdSize, householdType) {
+  // Transit — modulate by income and household type
+  const transitMode = wc(BEH.transitMode, rng);
+  const [tMin,tMax] = BEH.transitTrips[transitMode.mode];
+  const weeklyTTC = ri(tMin, tMax, rng);
+  const transitPass = wc(BEH.transitPass, rng);
+
+  // Digital
+  const device = wc(BEH.primaryDevice, rng);
+  const internet = wc(BEH.internetUsage, rng);
+  const search = wc(BEH.searchEngine, rng);
+  const shopping = wc(BEH.onlineShopping, rng);
+
+  // Products — car ownership correlates with household size / income
+  // High income or families more likely to own car
+  const carW = income > 100000 || householdSize >= 3
+    ? BEH.carOwnership.map(c=>({...c, w: c.own==="No car"?.22:c.own==="1 car"?.50:.28}))
+    : BEH.carOwnership;
+  const car = wc(carW, rng);
+  const bike = wc(BEH.bikeOwnership, rng);
+  const streaming = wc(BEH.streamingServices, rng);
+  // Pick actual streaming services
+  const numServices = streaming.count==="None"?0:streaming.count==="1 service"?1:streaming.count==="2–3 services"?ri(2,3,rng):ri(4,6,rng);
+  const services = [];
+  const pool = [...BEH.streamingOptions];
+  for(let i=0;i<Math.min(numServices,pool.length);i++){
+    const idx=Math.floor(rng()*pool.length);
+    services.push(pool.splice(idx,1)[0]);
+  }
+
+  // Recreation — Beaches households are active
+  const beachFreq = wc(BEH.beachVisitFreq, rng);
+  const parkAct = wc(BEH.parkActivities, rng);
+  const parkTransit = wc(BEH.transitToParks, rng);
+  const facility = wc(BEH.facilityUsage, rng);
+
+  // Shelter costs
+  const costDist = tenure==="Owner" ? BEH.ownerMonthlyCost : BEH.renterMonthlyCost;
+  const costBracket = wc(costDist, rng);
+  const monthlyCost = ri(costBracket.min, costBracket.max, rng);
+  // Shelter burden: % of monthly income spent on shelter
+  const monthlyIncome = income / 12;
+  const shelterBurden = Math.round((monthlyCost / monthlyIncome) * 100);
+  const burdened = shelterBurden >= 30; // CMHC definition
+
+  return {
+    // Transit
+    transitMode: transitMode.mode,
+    weeklyTTCTrips: weeklyTTC,
+    prestoStatus: transitPass.type,
+    // Digital
+    primaryDevice: device.device,
+    internetUsage: internet.usage,
+    searchEngine: search.engine,
+    onlineShopping: shopping.freq,
+    // Products
+    carOwnership: car.own,
+    bikeOwnership: bike.own,
+    streamingCount: streaming.count,
+    streamingServices: services,
+    // Recreation
+    beachVisitFreq: beachFreq.freq,
+    primaryParkActivity: parkAct.act,
+    parkAccessMode: parkTransit.mode,
+    primaryFacility: facility.fac,
+    // Shelter
+    monthlyShelterCost: monthlyCost,
+    shelterCostRange: costBracket.range,
+    shelterBurdenPct: shelterBurden,
+    isShelterBurdened: burdened,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HOUSEHOLD GENERATOR
+// ═══════════════════════════════════════════════════════════════
+function genHH(id, demSeed, behSeed) {
+  const rng = rng32(demSeed + id);
+
+  const dw  = wc(CENSUS.dwellingTypes, rng);
+  const ten = wc(CENSUS.tenure, rng);
+  const hht = wc(CENSUS.householdType, rng);
+  const inc = wc(CENSUS.income, rng);
+  const sz  = wc(CENSUS.householdSize, rng).size;
+  const income = ri(inc.min, inc.max, rng);
+  const members = [];
+
+  const HEAD="Household maintainer",SPOUSE="Spouse / partner",CHILD="Child",PARENT="Parent / grandparent",OTHER="Other";
+
+  if(hht.type==="One-person"){
+    members.push(mkPerson(rng,genAge(rng,18,98),rng()<.52?"F":"M",HEAD));
+  } else if(hht.type==="Couple, no children"){
+    const a1=genAge(rng,22,85),s1=rng()<.5?"F":"M",s2=s1==="F"?(rng()<.92?"M":"F"):(rng()<.92?"F":"M");
+    const a2=Math.max(22,Math.min(88,a1+ri(-8,8,rng)));
+    members.push(mkPerson(rng,a1,s1,HEAD),mkPerson(rng,a2,s2,SPOUSE));
+    for(let i=0;i<Math.max(0,sz-2);i++)members.push(mkPerson(rng,genAge(rng,18,50),rng()<.5?"F":"M",OTHER));
+  } else if(hht.type==="Couple with children"){
+    const a1=genAge(rng,28,60),s1=rng()<.5?"F":"M",s2=s1==="F"?"M":"F";
+    const a2=Math.max(26,Math.min(65,a1+ri(-6,6,rng)));
+    members.push(mkPerson(rng,a1,s1,HEAD),mkPerson(rng,a2,s2,SPOUSE));
+    const nk=Math.max(1,Math.min(sz-2,4));
+    for(let k=0;k<nk;k++)members.push(mkPerson(rng,ri(0,Math.min(24,a1-18),rng),rng()<.5?"F":"M",CHILD));
+  } else if(hht.type==="Single parent"){
+    const a1=genAge(rng,25,60);
+    members.push(mkPerson(rng,a1,rng()<.78?"F":"M",HEAD));
+    const nk=Math.max(1,Math.min(sz-1,4));
+    for(let k=0;k<nk;k++)members.push(mkPerson(rng,ri(0,Math.min(22,a1-18),rng),rng()<.5?"F":"M",CHILD));
+  } else {
+    const a1=genAge(rng,30,65);
+    members.push(mkPerson(rng,a1,rng()<.5?"F":"M",HEAD));
+    for(let i=0;i<Math.max(1,sz-1);i++){
+      const roll=rng();let rel,minA,maxA;
+      if(roll<.35){rel=SPOUSE;minA=Math.max(22,a1-10);maxA=a1+10;}
+      else if(roll<.60){rel=CHILD;minA=0;maxA=Math.min(30,a1-18);}
+      else if(roll<.80){rel=PARENT;minA=Math.max(50,a1+20);maxA=90;}
+      else{rel=OTHER;minA=18;maxA=70;}
+      members.push(mkPerson(rng,genAge(rng,Math.max(0,minA),Math.max(1,maxA)),rng()<.5?"F":"M",rel));
     }
+  }
 
-    function weightedChoice(items, rng) {
-      const total = items.reduce((s, i) => s + i.weight, 0);
-      let r = rng() * total;
-      for (const item of items) { r -= item.weight; if (r <= 0) return item; }
-      return items[items.length - 1];
-    }
+  const beh = genBehaviour(rng32(behSeed + id), ten.type, income, members.length, hht.type);
 
-    function pick(arr, rng) { return arr[Math.floor(rng() * arr.length)]; }
+  return {
+    id:`M4E-${String(id).padStart(5,"0")}`,
+    fsa:"M4E",
+    dwelling:dw.type, tenure:ten.type, householdType:hht.type,
+    householdSize:members.length, incomeBracket:inc.bracket,
+    annualIncome:income, members,
+    beh,
+  };
+}
 
-    function generateAge(rng) {
-      const g = weightedChoice(CENSUS.ageGroups, rng);
-      return g.min + Math.floor(rng() * (g.max - g.min + 1));
-    }
+function genBatch(start, count, demSeed, behSeed) {
+  const out=[];
+  for(let i=0;i<count;i++) out.push(genHH(start+i, demSeed, behSeed));
+  return out;
+}
 
-    function generatePerson(rng, forceAdult = false) {
-      const age = forceAdult ? 18 + Math.floor(rng() * 62) : generateAge(rng);
-      const sex = rng() < 0.506 ? "F" : "M";
-      const fn = sex === "F" ? pick(CENSUS.firstNamesF, rng) : pick(CENSUS.firstNamesM, rng);
-      return { name: fn, sex, age };
-    }
+// ═══════════════════════════════════════════════════════════════
+// CSV EXPORT
+// ═══════════════════════════════════════════════════════════════
 
-    function generateHousehold(id, rng) {
-      const dwelling = weightedChoice(CENSUS.dwellingTypes, rng);
-      const tenure = weightedChoice(CENSUS.tenure, rng);
-      const hhType = weightedChoice(CENSUS.householdType, rng);
-      const incomeBracket = weightedChoice(CENSUS.income, rng);
-      const incomeVal = incomeBracket.min + Math.floor(rng() * (incomeBracket.max - incomeBracket.min));
-      const lastName = pick(CENSUS.lastNames, rng);
-      const streetNum = 10 + Math.floor(rng() * 490);
-      const street = pick(CENSUS.streets, rng);
-      const postal = `M4E ${String.fromCharCode(65 + Math.floor(rng() * 10))}${Math.floor(rng() * 10)}${String.fromCharCode(65 + Math.floor(rng() * 10))}`;
 
-      let size = weightedChoice(CENSUS.householdSize, rng).size;
-      if (hhType.type === "One-person") size = 1;
-      else if (hhType.type === "Couple without children" && size < 2) size = 2;
-      else if (hhType.type === "Couple with children" && size < 3) size = 3;
-      else if (hhType.type === "Single parent" && size < 2) size = 2;
+// ═══════════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════════
+const DEM_SEED = 20210511;
+const PAGE = 40, TOTAL = 10500;
+const C = {
+  bg:"#06111c",surf:"#0a1825",card:"#0d1e2e",cardSel:"#0c2240",
+  bord:"#162535",bordAc:"#2a5080",txt:"#c8d8e8",mut:"#4a6a85",
+  acc:"#4a90d9",grn:"#52c97a",red:"#e06060",yel:"#e8b84b",
+  pur:"#9b7fd4",pnk:"#d47fa0",teal:"#4ab8d4",org:"#e8884b",
+};
+const si={background:C.card,border:`1px solid ${C.bord}`,color:C.txt,borderRadius:5,padding:"5px 9px",fontSize:12,fontFamily:"'DM Mono',monospace",cursor:"pointer",outline:"none"};
 
-      const members = [];
-      if (hhType.type === "One-person") {
-        members.push(generatePerson(rng, true));
-      } else if (hhType.type === "Couple without children") {
-        const p1 = generatePerson(rng, true);
-        const p2Age = Math.max(22, Math.min(90, p1.age + Math.floor(rng() * 10 - 5)));
-        members.push(p1, { ...generatePerson(rng, true), age: p2Age });
-      } else if (hhType.type === "Couple with children") {
-        const p1 = generatePerson(rng, true);
-        const p2Age = Math.max(25, Math.min(65, p1.age + Math.floor(rng() * 8 - 4)));
-        members.push(p1, { ...generatePerson(rng, true), age: p2Age });
-        for (let k = 0; k < Math.max(1, size - 2); k++) {
-          members.push({ ...generatePerson(rng, false), age: Math.floor(rng() * 22) });
-        }
-      } else if (hhType.type === "Single parent") {
-        members.push(generatePerson(rng, true));
-        for (let k = 0; k < Math.max(1, size - 1); k++) {
-          members.push({ ...generatePerson(rng, false), age: Math.floor(rng() * 22) });
-        }
-      } else {
-        const numAdults = 2 + Math.floor(rng() * 2);
-        for (let a = 0; a < numAdults; a++) members.push(generatePerson(rng, true));
-        for (let o = 0; o < Math.max(0, size - numAdults); o++) {
-          members.push({ ...generatePerson(rng, false), age: Math.floor(rng() * 18) });
-        }
-      }
+function Tag({ch,col}){return <span style={{background:col+"22",color:col,border:`1px solid ${col}44`,borderRadius:3,padding:"1px 6px",fontSize:10,fontWeight:500,whiteSpace:"nowrap"}}>{ch}</span>;}
+function AgeBadge({age}){
+  const bg=age<15?"#1a4a7a":age<30?"#1a5a3a":age<50?"#4a3a10":age<65?"#4a2020":"#3a2a5a";
+  const cl=age<15?"#7ab8f5":age<30?"#6dd89a":age<50?"#e8c060":age<65?"#e08888":"#b898e8";
+  return <span style={{background:bg,color:cl,borderRadius:3,padding:"1px 5px",fontSize:10,fontWeight:700}}>{age}</span>;
+}
 
-      return {
-        id: `M4E-${String(id).padStart(5, "0")}`,
-        address: `${streetNum} ${street}`,
-        postal, dwelling: dwelling.type, tenure: tenure.type,
-        householdType: hhType.type, householdSize: members.length,
-        incomeBracket: incomeBracket.bracket, annualIncome: incomeVal,
-        lastName, members,
-      };
-    }
+// Compact behavioural icon strip shown on each card
+function BehStrip({beh}) {
+  const transit = beh.weeklyTTCTrips > 4 ? C.acc : beh.weeklyTTCTrips > 1 ? C.teal : C.mut;
+  const shelter = beh.isShelterBurdened ? C.red : beh.shelterBurdenPct >= 25 ? C.yel : C.grn;
+  const digital = beh.internetUsage==="Heavy (6+ hrs/day)" ? C.pur : beh.internetUsage==="Moderate (3–6 hrs/day)" ? C.teal : C.mut;
+  const rec = beh.beachVisitFreq==="Weekly (summer)" ? C.grn : beh.beachVisitFreq==="Monthly" ? C.teal : C.mut;
+  const car = beh.carOwnership==="No car" ? C.grn : beh.carOwnership==="1 car" ? C.yel : C.org;
+  return (
+    <div style={{display:"flex",gap:6,alignItems:"center",marginTop:7,flexWrap:"wrap"}}>
+      <Tag ch={`🚌 ${beh.weeklyTTCTrips}x/wk`} col={transit}/>
+      <Tag ch={`🏠 $${beh.monthlyShelterCost.toLocaleString()}/mo`} col={shelter}/>
+      <Tag ch={`💻 ${beh.primaryDevice.split(" ")[0]}`} col={digital}/>
+      <Tag ch={`🏖 ${beh.beachVisitFreq.split(" ")[0]}`} col={rec}/>
+      <Tag ch={`🚗 ${beh.carOwnership}`} col={car}/>
+      {beh.streamingServices.slice(0,2).map(s=><Tag key={s} ch={s} col={C.pur}/>)}
+      {beh.isShelterBurdened && <Tag ch="⚠ burdened" col={C.red}/>}
+    </div>
+  );
+}
 
-    function generateBatch(startId, count, baseSeed) {
-      const results = [];
-      for (let i = 0; i < count; i++) {
-        const rng = mulberry32(baseSeed + startId + i);
-        results.push(generateHousehold(startId + i, rng));
-      }
-      return results;
-    }
+function BehSection({title, icon, children}) {
+  return (
+    <div style={{marginTop:14}}>
+      <div style={{color:C.mut,fontSize:10,textTransform:"uppercase",letterSpacing:1,marginBottom:6,display:"flex",alignItems:"center",gap:5}}>
+        <span>{icon}</span><span>{title}</span>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:3}}>{children}</div>
+    </div>
+  );
+}
 
-    function toCSV(households) {
-      const headers = ["ID","Address","Postal","DwellingType","Tenure","HouseholdType","HouseholdSize","IncomeBracket","AnnualIncome","Members"];
-      const rows = households.map(h => [
-        h.id, `"${h.address}"`, h.postal, `"${h.dwelling}"`, h.tenure,
-        `"${h.householdType}"`, h.householdSize, `"${h.incomeBracket}"`, h.annualIncome,
-        `"${h.members.map(m => `${m.name} (${m.sex}, ${m.age})`).join("; ")}"`
-      ]);
-      return [headers, ...rows].map(r => r.join(",")).join("\n");
-    }
+function BehRow({label, value, color}) {
+  return (
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:`1px solid ${C.bord}`}}>
+      <span style={{color:C.mut,fontSize:11}}>{label}</span>
+      <span style={{color:color||C.txt,fontSize:11,fontWeight:500,textAlign:"right",maxWidth:"60%"}}>{value}</span>
+    </div>
+  );
+}
 
-    function downloadFile(content, filename, type) {
-      const blob = new Blob([content], { type });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
-      URL.revokeObjectURL(url);
-    }
+function MemberRow({m}){
+  const RC={"Household maintainer":C.acc,"Spouse / partner":C.pnk,"Child":"#6dd89a","Parent / grandparent":C.pur,"Other":C.mut};
+  const EC={"Employed – full-time":C.grn,"Employed – part-time":C.teal,"Self-employed":C.yel,"Unemployed":C.red,"Not in labour force":C.mut,"N/A":C.mut};
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:7,padding:"5px 0",borderBottom:`1px solid ${C.bord}`,flexWrap:"wrap"}}>
+      <span style={{color:m.sex==="F"?C.pnk:C.acc,fontSize:13}}>{m.sex==="F"?"♀":"♂"}</span>
+      <AgeBadge age={m.age}/>
+      <Tag ch={m.relationship} col={RC[m.relationship]||C.mut}/>
+      <Tag ch={m.employment} col={EC[m.employment]||C.mut}/>
+      <span style={{color:C.mut,fontSize:10,fontFamily:"monospace"}}>{m.education==="N/A"?"":m.education}</span>
+    </div>
+  );
+}
 
-    const SEED = 20210511;
-    const PAGE_SIZE = 50;
-    const TOTAL = CENSUS.totalHouseholds;
-
-    const S = {
-      select: { background: "#0d1b29", border: "1px solid #1e2d3d", color: "#cdd8e3", borderRadius: 4, padding: "5px 8px", fontSize: 12, cursor: "pointer" },
-      btn: { background: "#1e3a5f", border: "1px solid #2d5280", color: "#90caf9", borderRadius: 4, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" },
-    };
-
-    function MemberPill({ m }) {
-      return (
-        <span style={{ display:"inline-flex", alignItems:"center", background:"#1e2a3a", border:"1px solid #2d3f52", borderRadius:20, padding:"3px 10px", margin:2, fontSize:11, gap:4 }}>
-          <span style={{ color: m.sex==="F"?"#f48fb1":"#90caf9" }}>{m.sex==="F"?"♀":"♂"}</span>
-          <span style={{ color:"#cdd8e3" }}>{m.name}</span>
-          <span style={{ background: m.age<18?"#64b5f6":m.age<35?"#81c784":m.age<55?"#ffb74d":m.age<70?"#e57373":"#ce93d8", color:"#111", borderRadius:4, padding:"1px 5px", fontSize:10, fontWeight:700, marginLeft:2 }}>{m.age}</span>
-        </span>
-      );
-    }
-
-    function HouseholdCard({ hh, onClick, selected }) {
-      return (
-        <div onClick={() => onClick(hh)} style={{
-          background: selected?"#0d2137":"#101c2a",
-          border: `1px solid ${selected?"#3d7ab5":"#1e2d3d"}`,
-          borderLeft: `3px solid ${selected?"#5b9bd5":"#1e2d3d"}`,
-          borderRadius:6, padding:"10px 14px", cursor:"pointer",
-          transition:"all 0.15s", marginBottom:6,
-        }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-            <div>
-              <span style={{ color:"#5b9bd5", fontFamily:"monospace", fontSize:11 }}>{hh.id}</span>
-              <div style={{ color:"#e2eaf2", fontWeight:600, fontSize:14, marginTop:1 }}>{hh.address}</div>
-              <div style={{ color:"#7a9bb5", fontSize:12 }}>{hh.postal} · {hh.dwelling}</div>
-            </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{ color:"#81c784", fontWeight:700, fontSize:13 }}>${hh.annualIncome.toLocaleString()}</div>
-              <div style={{ color:"#7a9bb5", fontSize:11 }}>{hh.tenure}</div>
-            </div>
+function HHCard({hh,onClick,sel}){
+  return (
+    <div onClick={()=>onClick(hh)} style={{background:sel?C.cardSel:C.card,border:`1px solid ${sel?C.bordAc:C.bord}`,borderLeft:`3px solid ${sel?C.acc:C.bord}`,borderRadius:6,padding:"10px 14px",cursor:"pointer",transition:"all 0.12s",marginBottom:5}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
+            <span style={{color:C.acc,fontFamily:"monospace",fontSize:11}}>{hh.id}</span>
+            <Tag ch={hh.dwelling} col={C.mut}/>
+            <Tag ch={hh.tenure} col={hh.tenure==="Owner"?C.grn:C.yel}/>
           </div>
-          <div style={{ marginTop:6, display:"flex", flexWrap:"wrap" }}>
-            {hh.members.map((m,i) => <MemberPill key={i} m={m} />)}
+          <div style={{color:C.txt,fontSize:13,fontWeight:600}}>{hh.householdType} · {hh.householdSize} person{hh.householdSize>1?"s":""}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{color:C.grn,fontWeight:700,fontSize:13,fontFamily:"monospace"}}>${hh.annualIncome.toLocaleString()}</div>
+          <div style={{color:C.mut,fontSize:10}}>{hh.incomeBracket}</div>
+        </div>
+      </div>
+
+      {/* Member pills */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:6}}>
+        {hh.members.map((m,i)=>(
+          <span key={i} style={{display:"inline-flex",alignItems:"center",gap:3,background:C.surf,border:`1px solid ${C.bord}`,borderRadius:20,padding:"2px 7px",fontSize:11}}>
+            <span style={{color:m.sex==="F"?C.pnk:C.acc}}>{m.sex==="F"?"♀":"♂"}</span>
+            <AgeBadge age={m.age}/>
+          </span>
+        ))}
+      </div>
+
+      {/* Behavioural strip */}
+      <BehStrip beh={hh.beh}/>
+    </div>
+  );
+}
+
+function DetailPanel({hh,onClose}){
+  if(!hh) return null;
+  const b = hh.beh;
+  const burdenColor = b.isShelterBurdened ? C.red : b.shelterBurdenPct>=25 ? C.yel : C.grn;
+  return (
+    <div style={{background:C.surf,border:`1px solid ${C.bord}`,borderRadius:8,padding:18,position:"sticky",top:10,overflowY:"auto",maxHeight:"calc(100vh - 40px)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <span style={{color:C.acc,fontFamily:"monospace",fontSize:13,fontWeight:600}}>{hh.id}</span>
+        <button onClick={onClose} style={{background:"none",border:"none",color:C.mut,cursor:"pointer",fontSize:22,lineHeight:1}}>×</button>
+      </div>
+
+      {/* Core household */}
+      {[["FSA","M4E"],["Dwelling",hh.dwelling],["Tenure",hh.tenure],["Household Type",hh.householdType],["Size",`${hh.householdSize} person${hh.householdSize>1?"s":""}`],["Income Bracket",hh.incomeBracket],["Annual Income","$"+hh.annualIncome.toLocaleString()]].map(([k,v])=>(
+        <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${C.bord}`}}>
+          <span style={{color:C.mut,fontSize:11}}>{k}</span>
+          <span style={{color:C.txt,fontSize:11,fontWeight:500,textAlign:"right",maxWidth:"60%"}}>{v}</span>
+        </div>
+      ))}
+
+      {/* Members */}
+      <BehSection title="Household Members" icon="👥">
+        {hh.members.map((m,i)=><MemberRow key={i} m={m}/>)}
+      </BehSection>
+
+      {/* Transit */}
+      <BehSection title="Transit Behaviour" icon="🚌">
+        <BehRow label="Primary mode" value={b.transitMode} color={C.acc}/>
+        <BehRow label="Weekly TTC trips" value={b.weeklyTTCTrips}/>
+        <BehRow label="Presto status" value={b.prestoStatus}/>
+      </BehSection>
+
+      {/* Digital */}
+      <BehSection title="Digital Behaviour" icon="💻">
+        <BehRow label="Primary device" value={b.primaryDevice}/>
+        <BehRow label="Internet usage" value={b.internetUsage}/>
+        <BehRow label="Search engine" value={b.searchEngine}/>
+        <BehRow label="Online shopping" value={b.onlineShopping}/>
+      </BehSection>
+
+      {/* Products */}
+      <BehSection title="Product Ownership" icon="🛍">
+        <BehRow label="Car ownership" value={b.carOwnership} color={b.carOwnership==="No car"?C.grn:C.yel}/>
+        <BehRow label="Bike ownership" value={b.bikeOwnership}/>
+        <BehRow label="Streaming" value={b.streamingCount}/>
+        {b.streamingServices.length>0&&(
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"4px 0"}}>
+            {b.streamingServices.map(s=><Tag key={s} ch={s} col={C.pur}/>)}
+          </div>
+        )}
+      </BehSection>
+
+      {/* Recreation */}
+      <BehSection title="Recreation & Parks" icon="🏖">
+        <BehRow label="Beach visits" value={b.beachVisitFreq} color={C.grn}/>
+        <BehRow label="Primary activity" value={b.primaryParkActivity}/>
+        <BehRow label="Gets to parks by" value={b.parkAccessMode}/>
+        <BehRow label="Primary facility" value={b.primaryFacility}/>
+      </BehSection>
+
+      {/* Shelter */}
+      <BehSection title="Shelter Costs" icon="🏠">
+        <BehRow label="Monthly cost" value={`$${b.monthlyShelterCost.toLocaleString()}`} color={burdenColor}/>
+        <BehRow label="Cost range" value={b.shelterCostRange}/>
+        <BehRow label="Shelter burden" value={`${b.shelterBurdenPct}% of income`} color={burdenColor}/>
+        <BehRow label="CMHC burdened (≥30%)" value={b.isShelterBurdened?"Yes — over threshold":"No"} color={b.isShelterBurdened?C.red:C.grn}/>
+      </BehSection>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// APP
+// ═══════════════════════════════════════════════════════════════
+function App() {
+  const [data, setData]       = useState([]);
+  const [busy, setBusy]       = useState(false);
+  const [prog, setProg]       = useState(0);
+  const [behSeed, setBehSeed] = useState(Date.now());
+  const [resampling, setResampling] = useState(false);
+  const [sel, setSel]         = useState(null);
+  const [pg, setPg]           = useState(1);
+  const [q, setQ]             = useState("");
+  const [fDw,setFDw]          = useState("All");
+  const [fTen,setFTen]        = useState("All");
+  const [fInc,setFInc]        = useState("All");
+  const [fTyp,setFTyp]        = useState("All");
+  const [fSz,setFSz]          = useState("All");
+  const [fBeh,setFBeh]        = useState("All");
+  const [srt,setSrt]          = useState("id");
+
+  // Generate base demographics + behaviour
+  useEffect(()=>{
+    if(busy||data.length>=TOTAL) return;
+    setBusy(true);
+    const B=500;
+    const run=(s)=>{
+      if(s>=TOTAL){setBusy(false);return;}
+      setTimeout(()=>{
+        setData(p=>[...p,...genBatch(s+1,Math.min(B,TOTAL-s),DEM_SEED,behSeed)]);
+        setProg(Math.min(s+B,TOTAL));
+        run(s+B);
+      },0);
+    };
+    run(0);
+  },[]);
+
+  // Resample behaviour only
+  const resample = useCallback(()=>{
+    if(busy||resampling) return;
+    const newSeed = Date.now();
+    setBehSeed(newSeed);
+    setResampling(true);
+    setSel(null);
+    const B=1000;
+    let next = [...data];
+    const run=(s)=>{
+      if(s>=next.length){setResampling(false);setData([...next]);return;}
+      setTimeout(()=>{
+        for(let i=s;i<Math.min(s+B,next.length);i++){
+          const h=next[i];
+          next[i]={...h, beh:genBehaviour(rng32(newSeed+i+1), h.tenure, h.annualIncome, h.householdSize, h.householdType)};
+        }
+        run(s+B);
+      },0);
+    };
+    run(0);
+  },[data,busy,resampling]);
+
+  const filt = useMemo(()=>{
+    let d=data;
+    if(q){const lq=q.toLowerCase();d=d.filter(h=>h.id.includes(lq)||h.householdType.toLowerCase().includes(lq)||h.beh.transitMode.toLowerCase().includes(lq)||h.beh.primaryFacility.toLowerCase().includes(lq)||h.dwelling.toLowerCase().includes(lq));}
+    if(fDw!=="All")  d=d.filter(h=>h.dwelling===fDw);
+    if(fTen!=="All") d=d.filter(h=>h.tenure===fTen);
+    if(fInc!=="All") d=d.filter(h=>h.incomeBracket===fInc);
+    if(fTyp!=="All") d=d.filter(h=>h.householdType===fTyp);
+    if(fSz!=="All")  d=d.filter(h=>fSz==="4+"?h.householdSize>=4:h.householdSize===+fSz);
+    if(fBeh==="TTC heavy")    d=d.filter(h=>h.beh.weeklyTTCTrips>=7);
+    if(fBeh==="No car")       d=d.filter(h=>h.beh.carOwnership==="No car");
+    if(fBeh==="Shelter burdened") d=d.filter(h=>h.beh.isShelterBurdened);
+    if(fBeh==="Frequent beach")   d=d.filter(h=>h.beh.beachVisitFreq==="Weekly (summer)");
+    if(fBeh==="Has Presto")   d=d.filter(h=>h.beh.prestoStatus==="Presto monthly");
+    if(srt==="income_desc") return [...d].sort((a,b)=>b.annualIncome-a.annualIncome);
+    if(srt==="income_asc")  return [...d].sort((a,b)=>a.annualIncome-b.annualIncome);
+    if(srt==="size_desc")   return [...d].sort((a,b)=>b.householdSize-a.householdSize);
+    if(srt==="shelter_desc")return [...d].sort((a,b)=>b.beh.shelterBurdenPct-a.beh.shelterBurdenPct);
+    if(srt==="ttc_desc")    return [...d].sort((a,b)=>b.beh.weeklyTTCTrips-a.beh.weeklyTTCTrips);
+    return d;
+  },[data,q,fDw,fTen,fInc,fTyp,fSz,fBeh,srt]);
+
+  const tp=Math.max(1,Math.ceil(filt.length/PAGE));
+  const cp=Math.min(pg,tp);
+  const pd=filt.slice((cp-1)*PAGE,cp*PAGE);
+  const pct=Math.round(prog/TOTAL*100);
+
+  const stats=useMemo(()=>{
+    if(!data.length) return null;
+    const s=[...data].sort((a,b)=>a.annualIncome-b.annualIncome);
+    const tp=data.reduce((x,h)=>x+h.householdSize,0);
+    const burdened=data.filter(h=>h.beh.isShelterBurdened).length;
+    const noCar=data.filter(h=>h.beh.carOwnership==="No car").length;
+    const ttcHeavy=data.filter(h=>h.beh.weeklyTTCTrips>=7).length;
+    return{
+      hh:data.length, persons:tp, avg:(tp/data.length).toFixed(2),
+      med:s[Math.floor(data.length/2)]?.annualIncome,
+      own:Math.round(data.filter(h=>h.tenure==="Owner").length/data.length*100),
+      burdened:Math.round(burdened/data.length*100),
+      noCar:Math.round(noCar/data.length*100),
+      ttcHeavy:Math.round(ttcHeavy/data.length*100),
+    };
+  },[data]);
+
+
+  const active=q||fDw!=="All"||fTen!=="All"||fInc!=="All"||fTyp!=="All"||fSz!=="All"||fBeh!=="All";
+  const reset=()=>{setQ("");setFDw("All");setFTen("All");setFInc("All");setFTyp("All");setFSz("All");setFBeh("All");setSrt("id");setPg(1);};
+
+  const pgBtns=(()=>{
+    if(tp<=7)return Array.from({length:tp},(_,i)=>i+1);
+    if(cp<=4)return[1,2,3,4,5,6,7];
+    if(cp>=tp-3)return[tp-6,tp-5,tp-4,tp-3,tp-2,tp-1,tp];
+    return[cp-3,cp-2,cp-1,cp,cp+1,cp+2,cp+3];
+  })();
+
+  return (
+    <div style={{background:C.bg,minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+
+      {/* Header */}
+      <div style={{background:C.surf,borderBottom:`1px solid ${C.bord}`,padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{background:"#0d2540",border:`1px solid ${C.bordAc}`,borderRadius:4,padding:"3px 10px"}}>
+              <span style={{color:C.acc,fontFamily:"monospace",fontWeight:700,fontSize:14,letterSpacing:1}}>M4E</span>
+            </div>
+            <h1 style={{color:C.txt,fontSize:15,fontWeight:600,margin:0}}>Synthetic Household Explorer</h1>
+          </div>
+          <div style={{color:C.mut,fontSize:11,marginTop:3,fontFamily:"monospace"}}>
+            The Beaches · 2021 Census + Behavioural · {data.length.toLocaleString()} / {TOTAL.toLocaleString()} households
           </div>
         </div>
-      );
-    }
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={resample} disabled={busy||resampling} style={{...si,padding:"6px 12px",color:C.yel,borderColor:C.yel+"44"}}>
+            {resampling?"⟳ Resampling…":"⟳ Resample Behaviour"}
+          </button>
 
-    function DetailPanel({ hh, onClose }) {
-      if (!hh) return null;
-      return (
-        <div style={{ background:"#0b1622", border:"1px solid #1e2d3d", borderRadius:8, padding:20, position:"sticky", top:10 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:12 }}>
-            <span style={{ color:"#5b9bd5", fontFamily:"monospace", fontSize:12 }}>{hh.id}</span>
-            <button onClick={onClose} style={{ background:"none", border:"none", color:"#7a9bb5", cursor:"pointer", fontSize:20, lineHeight:1 }}>×</button>
+        </div>
+      </div>
+
+      {/* Progress */}
+      {(busy||resampling)&&(
+        <div style={{background:C.surf,padding:"0 20px 8px",borderBottom:`1px solid ${C.bord}`}}>
+          <div style={{background:C.bord,borderRadius:3,height:3,overflow:"hidden"}}>
+            <div style={{background:resampling?C.yel:C.acc,width:`${busy?pct:100}%`,height:"100%",transition:"width 0.3s"}}/>
           </div>
-          <h3 style={{ color:"#e2eaf2", margin:"0 0 4px", fontSize:16 }}>{hh.address}</h3>
-          <div style={{ color:"#7a9bb5", fontSize:12, marginBottom:16 }}>{hh.postal}</div>
+          <div style={{color:C.mut,fontSize:11,marginTop:4,fontFamily:"monospace"}}>
+            {resampling?"Resampling behavioural data…":`Generating… ${pct}% (${prog.toLocaleString()} households)`}
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div style={{background:C.surf,borderBottom:`1px solid ${C.bord}`,padding:"8px 20px",display:"flex",flexWrap:"wrap",gap:7,alignItems:"center"}}>
+        <input value={q} onChange={e=>{setQ(e.target.value);setPg(1);}} placeholder="Search ID, household type, transit mode, facility…" style={{...si,padding:"6px 10px",width:280}}/>
+        <select value={fTyp} onChange={e=>{setFTyp(e.target.value);setPg(1);}} style={si}>
+          <option value="All">All Household Types</option>
+          {CENSUS.householdType.map(t=><option key={t.type}>{t.type}</option>)}
+        </select>
+        <select value={fTen} onChange={e=>{setFTen(e.target.value);setPg(1);}} style={si}>
+          <option value="All">Owner + Renter</option>
+          <option>Owner</option><option>Renter</option>
+        </select>
+        <select value={fInc} onChange={e=>{setFInc(e.target.value);setPg(1);}} style={si}>
+          <option value="All">All Income Brackets</option>
+          {CENSUS.income.map(i=><option key={i.bracket}>{i.bracket}</option>)}
+        </select>
+        <select value={fDw} onChange={e=>{setFDw(e.target.value);setPg(1);}} style={si}>
+          <option value="All">All Dwelling Types</option>
+          {CENSUS.dwellingTypes.map(d=><option key={d.type}>{d.type}</option>)}
+        </select>
+        <select value={fSz} onChange={e=>{setFSz(e.target.value);setPg(1);}} style={si}>
+          <option value="All">Any Size</option>
+          <option value="1">1 Person</option><option value="2">2 People</option>
+          <option value="3">3 People</option><option value="4+">4+ People</option>
+        </select>
+        <select value={fBeh} onChange={e=>{setFBeh(e.target.value);setPg(1);}} style={{...si,color:fBeh!=="All"?C.yel:C.txt}}>
+          <option value="All">All Behaviours</option>
+          <option>TTC heavy</option>
+          <option>No car</option>
+          <option>Shelter burdened</option>
+          <option>Frequent beach</option>
+          <option>Has Presto</option>
+        </select>
+        <select value={srt} onChange={e=>{setSrt(e.target.value);setPg(1);}} style={si}>
+          <option value="id">Sort: ID</option>
+          <option value="income_desc">Income ↓</option>
+          <option value="income_asc">Income ↑</option>
+          <option value="size_desc">Size ↓</option>
+          <option value="shelter_desc">Shelter burden ↓</option>
+          <option value="ttc_desc">TTC trips ↓</option>
+        </select>
+        {active&&<button onClick={reset} style={{...si,color:C.red,padding:"5px 10px"}}>✕ Clear</button>}
+        <span style={{color:C.mut,fontSize:11,marginLeft:"auto",fontFamily:"monospace"}}>{filt.length.toLocaleString()} matching · pg {cp}/{tp}</span>
+      </div>
+
+      {/* Body */}
+      <div style={{flex:1,display:"grid",gridTemplateColumns:sel?"1fr 420px":"1fr",maxWidth:1500,width:"100%",margin:"0 auto",padding:16,gap:16,alignItems:"start"}}>
+        <div>
+          {busy&&!data.length&&<div style={{color:C.mut,textAlign:"center",marginTop:80,fontSize:13}}>Generating 10,500 households with demographic + behavioural profiles…</div>}
+          {!busy&&!pd.length&&<div style={{color:C.mut,textAlign:"center",marginTop:80}}>No households match your filters.</div>}
+          {pd.map(hh=><HHCard key={hh.id} hh={hh} onClick={h=>setSel(sel?.id===h.id?null:h)} sel={sel?.id===hh.id}/>)}
+          {tp>1&&(
+            <div style={{display:"flex",justifyContent:"center",gap:5,marginTop:14,flexWrap:"wrap"}}>
+              <button onClick={()=>setPg(1)} disabled={cp===1} style={si}>«</button>
+              <button onClick={()=>setPg(p=>Math.max(1,p-1))} disabled={cp===1} style={si}>‹</button>
+              {pgBtns.map(p=>(
+                <button key={p} onClick={()=>setPg(p)} style={{...si,background:cp===p?"#0d2540":C.card,color:cp===p?C.acc:C.txt,fontWeight:cp===p?700:400,border:`1px solid ${cp===p?C.bordAc:C.bord}`}}>{p}</button>
+              ))}
+              <button onClick={()=>setPg(p=>Math.min(tp,p+1))} disabled={cp===tp} style={si}>›</button>
+              <button onClick={()=>setPg(tp)} disabled={cp===tp} style={si}>»</button>
+            </div>
+          )}
+        </div>
+        {sel&&<DetailPanel hh={sel} onClose={()=>setSel(null)}/>}
+      </div>
+
+      {/* Footer stats */}
+      {stats&&(
+        <div style={{background:C.surf,borderTop:`1px solid ${C.bord}`,padding:"10px 20px",display:"flex",gap:24,flexWrap:"wrap"}}>
           {[
-            ["Dwelling Type", hh.dwelling], ["Tenure", hh.tenure],
-            ["Household Type", hh.householdType], ["Household Size", hh.householdSize + " person" + (hh.householdSize>1?"s":"")],
-            ["Income Bracket", hh.incomeBracket], ["Annual Income", "$"+hh.annualIncome.toLocaleString()],
-          ].map(([label, val]) => (
-            <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #1e2d3d" }}>
-              <span style={{ color:"#7a9bb5", fontSize:12 }}>{label}</span>
-              <span style={{ color:"#cdd8e3", fontSize:12, fontWeight:500, textAlign:"right", maxWidth:"55%" }}>{val}</span>
+            ["Households",stats.hh.toLocaleString(),C.grn],
+            ["Total Persons",stats.persons.toLocaleString(),C.grn],
+            ["Avg HH Size",stats.avg,C.grn],
+            ["Median Income","$"+stats.med?.toLocaleString(),C.grn],
+            ["Owner-occupied",stats.own+"%",C.grn],
+            ["Shelter burdened",stats.burdened+"%",stats.burdened>30?C.red:C.yel],
+            ["No car",stats.noCar+"%",C.teal],
+            ["TTC heavy users",stats.ttcHeavy+"%",C.acc],
+          ].map(([k,v,c])=>(
+            <div key={k}>
+              <div style={{color:C.mut,fontSize:9,textTransform:"uppercase",letterSpacing:1}}>{k}</div>
+              <div style={{color:c,fontWeight:700,fontSize:14,fontFamily:"monospace"}}>{v}</div>
             </div>
           ))}
-          <div style={{ marginTop:16 }}>
-            <div style={{ color:"#7a9bb5", fontSize:10, marginBottom:8, textTransform:"uppercase", letterSpacing:1 }}>Household Members</div>
-            {hh.members.map((m,i) => (
-              <div key={i} style={{ display:"flex", gap:12, padding:"6px 0", borderBottom:"1px solid #131f2b", alignItems:"center" }}>
-                <span style={{ color:m.sex==="F"?"#f48fb1":"#90caf9", fontSize:20 }}>{m.sex==="F"?"♀":"♂"}</span>
-                <div>
-                  <div style={{ color:"#e2eaf2", fontSize:13, fontWeight:500 }}>{m.name} {hh.lastName}</div>
-                  <div style={{ color:"#7a9bb5", fontSize:11 }}>Age {m.age}</div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
 
-    function App() {
-      const [generated, setGenerated] = useState([]);
-      const [isGenerating, setIsGenerating] = useState(false);
-      const [progress, setProgress] = useState(0);
-      const [selected, setSelected] = useState(null);
-      const [page, setPage] = useState(1);
-      const [search, setSearch] = useState("");
-      const [filterDwelling, setFilterDwelling] = useState("All");
-      const [filterTenure, setFilterTenure] = useState("All");
-      const [filterIncome, setFilterIncome] = useState("All");
-      const [filterSize, setFilterSize] = useState("All");
-      const [sortBy, setSortBy] = useState("id");
-
-      useEffect(() => {
-        if (isGenerating || generated.length >= TOTAL) return;
-        setIsGenerating(true);
-        const BATCH = 500;
-        const runBatch = (start) => {
-          if (start >= TOTAL) { setIsGenerating(false); return; }
-          setTimeout(() => {
-            const batch = generateBatch(start + 1, Math.min(BATCH, TOTAL - start), SEED);
-            setGenerated(prev => [...prev, ...batch]);
-            setProgress(Math.min(start + BATCH, TOTAL));
-            runBatch(start + BATCH);
-          }, 0);
-        };
-        runBatch(0);
-      }, []);
-
-      const filtered = useMemo(() => {
-        let data = generated;
-        if (search) {
-          const q = search.toLowerCase();
-          data = data.filter(h =>
-            h.id.toLowerCase().includes(q) || h.address.toLowerCase().includes(q) ||
-            h.postal.toLowerCase().includes(q) || h.lastName.toLowerCase().includes(q) ||
-            h.members.some(m => m.name.toLowerCase().includes(q))
-          );
-        }
-        if (filterDwelling !== "All") data = data.filter(h => h.dwelling === filterDwelling);
-        if (filterTenure !== "All") data = data.filter(h => h.tenure === filterTenure);
-        if (filterIncome !== "All") data = data.filter(h => h.incomeBracket === filterIncome);
-        if (filterSize !== "All") data = data.filter(h => {
-          if (filterSize === "1") return h.householdSize === 1;
-          if (filterSize === "2") return h.householdSize === 2;
-          if (filterSize === "3") return h.householdSize === 3;
-          if (filterSize === "4+") return h.householdSize >= 4;
-          return true;
-        });
-        if (sortBy === "income_desc") return [...data].sort((a,b) => b.annualIncome - a.annualIncome);
-        if (sortBy === "income_asc") return [...data].sort((a,b) => a.annualIncome - b.annualIncome);
-        if (sortBy === "size_desc") return [...data].sort((a,b) => b.householdSize - a.householdSize);
-        if (sortBy === "size_asc") return [...data].sort((a,b) => a.householdSize - b.householdSize);
-        return data;
-      }, [generated, search, filterDwelling, filterTenure, filterIncome, filterSize, sortBy]);
-
-      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-      const currentPage = Math.min(page, totalPages);
-      const pageData = filtered.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
-      const pct = Math.round((progress / TOTAL) * 100);
-
-      const median = generated.length > 0
-        ? [...generated].sort((a,b) => a.annualIncome - b.annualIncome)[Math.floor(generated.length/2)]?.annualIncome
-        : 0;
-
-      return (
-        <div style={{ fontFamily:"'DM Mono','Courier New',monospace", background:"#070e17", minHeight:"100vh" }}>
-
-          {/* Header */}
-          <div style={{ background:"#0b1622", borderBottom:"1px solid #1e2d3d", padding:"14px 24px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
-            <div>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <span style={{ background:"#1e3a5f", color:"#5b9bd5", borderRadius:4, padding:"2px 10px", fontWeight:700, fontSize:13, letterSpacing:1 }}>M4E</span>
-                <h1 style={{ margin:0, fontSize:16, color:"#e2eaf2", fontWeight:600 }}>Synthetic Household Explorer</h1>
-              </div>
-              <div style={{ fontSize:11, color:"#5a7a96", marginTop:3 }}>
-                The Beaches, Toronto · 2021 Census-grounded · {generated.length.toLocaleString()} / {TOTAL.toLocaleString()} households
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => downloadFile(JSON.stringify(generated, null, 2), "m4e_households.json", "application/json")} disabled={isGenerating} style={S.btn}>↓ JSON</button>
-              <button onClick={() => downloadFile(toCSV(generated), "m4e_households.csv", "text/csv")} disabled={isGenerating} style={S.btn}>↓ CSV</button>
-            </div>
-          </div>
-
-          {/* Progress */}
-          {isGenerating && (
-            <div style={{ background:"#0b1622", padding:"0 24px 10px" }}>
-              <div style={{ background:"#1e2d3d", borderRadius:4, height:4, overflow:"hidden" }}>
-                <div style={{ background:"#3d7ab5", width:`${pct}%`, height:"100%", transition:"width 0.3s" }} />
-              </div>
-              <div style={{ color:"#5a7a96", fontSize:11, marginTop:4 }}>Generating… {pct}% ({progress.toLocaleString()} households)</div>
-            </div>
-          )}
-
-          {/* Filters */}
-          <div style={{ background:"#0b1622", borderBottom:"1px solid #1e2d3d", padding:"10px 24px", display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
-            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search address, name, ID, postal…"
-              style={{ ...S.select, padding:"6px 10px", width:230 }} />
-            <select value={filterDwelling} onChange={e => { setFilterDwelling(e.target.value); setPage(1); }} style={S.select}>
-              <option value="All">All Dwelling Types</option>
-              {CENSUS.dwellingTypes.map(d => <option key={d.type}>{d.type}</option>)}
-            </select>
-            <select value={filterTenure} onChange={e => { setFilterTenure(e.target.value); setPage(1); }} style={S.select}>
-              <option value="All">Owner + Renter</option>
-              <option>Owner</option><option>Renter</option>
-            </select>
-            <select value={filterIncome} onChange={e => { setFilterIncome(e.target.value); setPage(1); }} style={S.select}>
-              <option value="All">All Income Brackets</option>
-              {CENSUS.income.map(i => <option key={i.bracket}>{i.bracket}</option>)}
-            </select>
-            <select value={filterSize} onChange={e => { setFilterSize(e.target.value); setPage(1); }} style={S.select}>
-              <option value="All">Any Size</option>
-              <option value="1">1 Person</option><option value="2">2 People</option>
-              <option value="3">3 People</option><option value="4+">4+ People</option>
-            </select>
-            <select value={sortBy} onChange={e => { setSortBy(e.target.value); setPage(1); }} style={S.select}>
-              <option value="id">Sort: ID</option>
-              <option value="income_desc">Income ↓</option><option value="income_asc">Income ↑</option>
-              <option value="size_desc">Size ↓</option><option value="size_asc">Size ↑</option>
-            </select>
-            <span style={{ color:"#5a7a96", fontSize:11, marginLeft:"auto" }}>
-              {filtered.length.toLocaleString()} matching · pg {currentPage}/{totalPages}
-            </span>
-          </div>
-
-          {/* Body */}
-          <div style={{ display:"grid", gridTemplateColumns: selected ? "1fr 340px" : "1fr", maxWidth:1400, margin:"0 auto", padding:20, alignItems:"start", gap:0 }}>
-            <div>
-              {isGenerating && generated.length === 0 && (
-                <div style={{ color:"#5a7a96", textAlign:"center", marginTop:80, fontSize:13 }}>Generating households from 2021 Census distributions…</div>
-              )}
-              {pageData.length === 0 && !isGenerating && (
-                <div style={{ color:"#5a7a96", textAlign:"center", marginTop:80 }}>No households match your filters.</div>
-              )}
-              {pageData.map(hh => (
-                <HouseholdCard key={hh.id} hh={hh}
-                  onClick={h => setSelected(selected?.id === h.id ? null : h)}
-                  selected={selected?.id === hh.id} />
-              ))}
-
-              {totalPages > 1 && (
-                <div style={{ display:"flex", justifyContent:"center", gap:6, marginTop:16, flexWrap:"wrap" }}>
-                  <button onClick={() => setPage(1)} disabled={currentPage===1} style={S.select}>«</button>
-                  <button onClick={() => setPage(p => Math.max(1,p-1))} disabled={currentPage===1} style={S.select}>‹</button>
-                  {Array.from({length: Math.min(7, totalPages)}, (_, i) => {
-                    let p;
-                    if (totalPages <= 7) p = i+1;
-                    else if (currentPage <= 4) p = i+1;
-                    else if (currentPage >= totalPages-3) p = totalPages-6+i;
-                    else p = currentPage-3+i;
-                    return (
-                      <button key={p} onClick={() => setPage(p)}
-                        style={{ ...S.select, background: currentPage===p?"#1e3a5f":"#0d1b29", color: currentPage===p?"#90caf9":"#cdd8e3", fontWeight: currentPage===p?700:400 }}>
-                        {p}
-                      </button>
-                    );
-                  })}
-                  <button onClick={() => setPage(p => Math.min(totalPages,p+1))} disabled={currentPage===totalPages} style={S.select}>›</button>
-                  <button onClick={() => setPage(totalPages)} disabled={currentPage===totalPages} style={S.select}>»</button>
-                </div>
-              )}
-            </div>
-
-            {selected && (
-              <div style={{ paddingLeft:20 }}>
-                <DetailPanel hh={selected} onClose={() => setSelected(null)} />
-              </div>
-            )}
-          </div>
-
-          {/* Footer stats */}
-          {generated.length > 0 && (
-            <div style={{ background:"#0b1622", borderTop:"1px solid #1e2d3d", padding:"12px 24px", display:"flex", gap:32, flexWrap:"wrap" }}>
-              {[
-                ["Total Households", generated.length.toLocaleString()],
-                ["Total Residents", generated.reduce((s,h) => s+h.householdSize, 0).toLocaleString()],
-                ["Avg Household Size", (generated.reduce((s,h) => s+h.householdSize, 0) / generated.length).toFixed(2)],
-                ["Median Income", "$" + median?.toLocaleString()],
-                ["% Owner-occupied", Math.round(generated.filter(h=>h.tenure==="Owner").length / generated.length * 100) + "%"],
-              ].map(([label, val]) => (
-                <div key={label}>
-                  <div style={{ color:"#5a7a96", fontSize:10, textTransform:"uppercase", letterSpacing:1 }}>{label}</div>
-                  <div style={{ color:"#81c784", fontWeight:700, fontSize:14 }}>{val}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
